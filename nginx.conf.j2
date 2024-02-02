@@ -12,6 +12,10 @@ http {
     access_log /var/log/nginx/access.log main;
     error_log /var/log/nginx/error.log;
 
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
+    limit_req zone=one burst=5;
+
     server {
         listen 80;
         server_name kv.com;
@@ -25,11 +29,38 @@ http {
         ssl_certificate /etc/nginx/certs/kv.com.crt;
         ssl_certificate_key /etc/nginx/certs/kv.com.key;
 
-        # Add SSL/TLS configurations and security headers here
+        # SSL/TLS configurations
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_prefer_server_ciphers off;
+        ssl_ciphers 'TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384';
+
+        ssl_session_timeout 1d;
+        ssl_session_cache shared:MozSSL:10m;  # about 40000 sessions
+        ssl_session_tickets off;
+
+        # OCSP stapling
+        ssl_stapling on;
+        ssl_stapling_verify on;
+
+        # Add security headers
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer-when-downgrade" always;
+        add_header X-XSS-Protection "1; mode=block" always;
 
         location / {
             root /var/www/html/demo-site;
             index index.html;
+        }
+
+        # Additional security configurations
+        location ~ /\. {
+            deny all;
+        }
+
+        location ~* ^/(?:\.git|\.svn|\.hg|\.bzr|_darcs)/ {
+            deny all;
         }
     }
 }
